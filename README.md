@@ -4,19 +4,23 @@ These tools are for processing planet.gpx, an enormous CSV file
 consisting of point coordinates. [Get it here](http://planet.osm.org/gps/).
 
 * `filter_points.pl`
+
 	Extract points inside a polygon specified by a osmosis' poly file
 	or a number of them (or just a bbox). Can be used to make a regional
 	extracts of planet.gpx.
 
 * `gpx2bitiles.pl`
+
 	Renders planet.gpx or its part into "bitiles": bit arrays that can
 	later be rendered into regular png images.
 
 * `clean_bitiles.pl`
+
 	Clean bitiles of salt-and-pepper type noise (there's a lot of it
         between latitudes -28.65 and 28.65).
 
 * `bitiles2png.pl`
+
 	Convert bitiles to png images and generate low zoom tiles from them.
 
 You can create antialiased low zoom tiles using [this tool](https://github.com/AMDmi3/tiletool).
