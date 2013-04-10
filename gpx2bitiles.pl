@@ -13,6 +13,7 @@ use Fcntl qw( SEEK_SET O_RDWR O_RDONLY O_BINARY O_CREAT );
 use Getopt::Long;
 
 my $factor = 10**7; # number by which all coordinates in source CSV are multiplied
+my $notify_points = 50000; # how often to print dots and save state file
 
 my $tile_folder;
 my $zoom;
@@ -23,6 +24,7 @@ my $verbose;
 my $infile = '-';
 my $thread_str;
 my $state_file = 'gpx2bitiles.state';
+my $lines;
 
 GetOptions('h|help' => \$help,
            'o|output=s' => \$tile_folder,
@@ -31,6 +33,7 @@ GetOptions('h|help' => \$help,
            'i|input=s' => \$infile,
            'b|bbox=s' => \$bbox_str,
            't|thread=s' => \$thread_str,
+           'l|lines' => \$lines,
            ) || usage();
 
 if( $help ) {
@@ -40,17 +43,21 @@ if( $help ) {
 usage("Please specify output directory with -o") unless defined($tile_folder);
 usage("Please specify zoom level with -z") unless defined($zoom);
 
+die('Drawing lines is not implemented yet.') if $lines;
+
 my @bbox = split(",", $bbox_str);
 die ("badly formed bounding box - use four comma-separated values for left longitude, ".
     "bottom latitude, right longitude, top latitude") unless $#bbox == 3;
-die("max longitude is less than min longitude") if ($bbox[2] < $bbox[0]);
-die("max latitude is less than min latitude") if ($bbox[3] < $bbox[1]);
+die("max longitude is less than min longitude") if $bbox[2] < $bbox[0];
+die("max latitude is less than min latitude") if $bbox[3] < $bbox[1];
 
 my $zoom2 = 2**$zoom;
 my $xmintile = 0;
 my $xmaxtile = 2**18;
 my $thread = '';
 my @cache = ('', undef, 0);
+my $maxdist = $zoom < 11 ? 1 : 2**($zoom - 11);
+$maxdist = 255 if $maxdist > 255;
 
 if( defined($thread_str) ) {
   die("Badly formed thread string: it must be THREAD,TOTAL") unless $thread_str =~ /^(\d+),(\d+)$/;
@@ -76,23 +83,45 @@ if( open(STATE, "<$state_file$thread") ) {
   close STATE;
   $ctarget = $1 if $line =~ /^(\d+)/;
   flush_tile();
-  print STDERR "Continuing from line $ctarget\n" if $verbose;
+  print STDERR "Continuing from point $ctarget\n" if $verbose;
 }
+
+my $filemode = 0; # 1=csv, 2=gpx
+my @lastpoint;
 
 open CSV, "<$infile" or die "Cannot open $infile: $!\n";
 while(<CSV>) {
+  if( !$filemode ) {
+    if( /^-?\d+(?:\.\d+)?,\s*-?\d+(?:\.\d+)?/ ) {
+        $filemode = 1;
+    } elsif( /\<gpx / ) {
+        $filemode = 2;
+    } else {
+        next;
+    }
+  }
+
+  my $lat;
+  my $lon;
+  if( $filemode == 1 ) {
+    next if !/^(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/;
+    $lat = $1 / $factor;
+    $lon = $2 / $factor;
+  } elsif( $filemode == 2 ) {
+    undef @lastpoint if /\<\/trkseg\>/;
+    next if !/\<trkpt.+?l(at|on)=['"](-?\d+(?:\.\d+)?)['"]\s+l(?:at|on)=['"](-?\d+(?:\.\d+)?)['"]/;
+    $lat = $1 eq 'at' ? $2 : $3;
+    $lon = $1 eq 'at' ? $3 : $2;
+  }
+  next if $lat <= $bbox[1] || $lat >= $bbox[3] || $lon <= $bbox[0] || $lon >= $bbox[2];
+
   $count++;
   next if $count < $ctarget;
-  if( $count % 10000 == 0 && open(STATE, ">$state_file$thread") ) {
+  if( $count % $notify_points == 0 && open(STATE, ">$state_file$thread") ) {
     print STDERR '.' if $verbose;
     print STATE $count;
     close STATE;
   }
-
-  next if !/^(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/;
-  my $lat = $1 / $factor;
-  my $lon = $2 / $factor;
-  next if $lat <= $bbox[1] || $lat >= $bbox[3] || $lon <= $bbox[0] || $lon >= $bbox[2];
 
   my $x = ($lon+180)/360 * $zoom2;
   my $y = (1 - log(tan(deg2rad($lat)) + sec(deg2rad($lat)))/pi)/2 * $zoom2;
@@ -102,12 +131,19 @@ while(<CSV>) {
   my $xpix = int(256 * ($x - $xtile));
   my $ypix = int(256 * ($y - $ytile));
 
-  my $vec = read_tile("$tile_folder/$zoom/$xtile/$ytile.bitile");
-  $vec->Bit_On($ypix * 256 + $xpix);
+  my $dist = @lastpoint ? abs($lastpoint[0] - $x) + abs($lastpoint[1] - $y) : 0;
+  if( $filemode != 2 || !$lines || $dist <= 1 || $dist > $maxdist ) {
+    my $vec = read_tile("$tile_folder/$zoom/$xtile/$ytile.bitile");
+    $vec->Bit_On($ypix * 256 + $xpix);
+  } else {
+    draw_line("$tile_folder/$zoom", $lastpoint[0], $lastpoint[1], $x, $y);
+  }
+  @lastpoint = ($x, $y);
 }
 close CSV;
 flush_tile();
 unlink "$state_file$thread";
+print STDERR "\n" if $verbose;
 
 sub read_tile {
   my $filename = shift;
@@ -135,26 +171,37 @@ sub flush_tile {
   close BITILE;
 }
 
+sub draw_line {
+  # draw a line from @lastpoint (excluding it) to ($x, $y)
+  # todo
+  my ($base, $x0, $y0, $x, $y) = @_;
+  my $xtile = int($x);
+  my $ytile = int($y);
+  my $xpix = int(256 * ($x - $xtile));
+  my $ypix = int(256 * ($y - $ytile));
+}
+
 sub usage {
     my ($msg) = @_;
     print STDERR "$msg\n\n" if defined($msg);
 
     my $prog = basename($0);
     print STDERR << "EOF";
-This script receives CSV file of "lat,lon" and makes a lot of bitiles.
+This script receives CSV file of "lat,lon" (or GPX) and makes a lot of bitiles.
 A bitile is a 8k bit array, which can be converted to regular PNG tile
 with bitiles2png.pl
 
 usage: $prog [-h] [-v] [-i file] -o target -z zoom [-b bbox]
 
  -h        : print ths help message and exit.
- -i file   : CSV points file to process (default is STDIN).
+ -i file   : CSV/GPX points file to process (default is STDIN).
  -o target : directory to store bitiles.
  -z zoom   : generated tiles zoom level.
  -b bbox   : limit points by bounding box (four comma-separated
              numbers: minlon,minlat,maxlon,maxlat).
  -t n,t    : process Nth part of T jobs.
- -v        : print a dot every 10000 lines.
+ -l        : connect GPX trace points.
+ -v        : print a dot every $notify_points points.
 
 All coordinates in source CSV file should be multiplied by $factor
 (you can change this number in the code).
