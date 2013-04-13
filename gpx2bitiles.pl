@@ -113,10 +113,10 @@ while(<CSV>) {
     $lat = $1 eq 'at' ? $2 : $3;
     $lon = $1 eq 'at' ? $3 : $2;
   }
-  next if $lat <= $bbox[1] || $lat >= $bbox[3] || $lon <= $bbox[0] || $lon >= $bbox[2];
 
   $count++;
   next if $count < $ctarget;
+  next if $lat <= $bbox[1] || $lat >= $bbox[3] || $lon <= $bbox[0] || $lon >= $bbox[2];
   if( $count % $notify_points == 0 && open(STATE, ">$state_file$thread") ) {
     print STDERR '.' if $verbose;
     print STATE $count;
