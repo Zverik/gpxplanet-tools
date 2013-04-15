@@ -3,11 +3,16 @@
 These tools are for processing planet.gpx, an enormous CSV file
 consisting of point coordinates. [Get it here](http://planet.osm.org/gps/).
 
-* `filter_points.pl`
+* `filter-points.pl`
 
 	Extract points inside a polygon specified by a osmosis' poly file
 	or a number of them (or just a bbox). Can be used to make a regional
 	extracts of planet.gpx.
+
+* `filter-gpx.pl`
+
+        Make extracts for GPX planet dump. Accepts tar file on STDIN and
+        produces tar file and a metadata header for each filtering polygon.
 
 * `gpx2bitiles.pl`
 
@@ -22,6 +27,11 @@ consisting of point coordinates. [Get it here](http://planet.osm.org/gps/).
 * `bitiles2png.pl`
 
 	Convert bitiles to png images and generate low zoom tiles from them.
+
+* `checkstatus.pl`
+
+        Draws an image of all existing tiles for a given zoom. Useful for checking
+        rendering progress of `gpx2bitiles.pl` -- but only for CSV input.
 
 You can create antialiased low zoom tiles using [this tool](https://github.com/AMDmi3/tiletool).
 
@@ -49,12 +59,24 @@ You can create antialiased low zoom tiles using [this tool](https://github.com/A
     (gzipped because of `-z` switch).
 
 
-3. Create zoom 12 bitiles for Australia.
+3. Make regional extracts from GPX dump for Austria and Germany.
+
+        xz -cdv gpx-planet-dump.tar.xz | perl filter-gpx.pl -l regions.lst -o extracts -z
+
+        for f in extracts/*.gz ; do echo $f ; gzip -dc $f | cat ${f%.tar.gz}.metadata.tarc - \
+        | xz > ${f%.gz}.xz ; rm $f ; rm ${f%.tar.gz}.metadata.tarc ; done
+
+
+4. Create zoom 12 bitiles for Australia.
 
         xz -cdv gps-points.csv.xz | perl gpx2bitiles.pl -b 112,-44,154,-10 -o ausbitiles -z 12
 
+    The process doesn't differ for GPX dump, except you have to untar it:
 
-4. The same, but in three processes.
+        tar -xJOf gpx-planet-dump.tar.xz | perl gpx2bitiles.pl -b 112,-44,154,-10 -o ausbitiles -z 12
+
+
+5. The same, but in three processes.
 
     Run the following commands simultaneously (in different windows or processes):
 
@@ -69,17 +91,17 @@ You can create antialiased low zoom tiles using [this tool](https://github.com/A
     state files.
 
 
-5. Remove noise from generated bitiles.
+6. Remove noise from generated bitiles.
 
         perl clean_bitiles.pl -i ausbitiles -o acbitiles
 
 
-6. Create PNG tiles for Australia, zoom levels 0 to 12.
+7. Create PNG tiles for Australia, zoom levels 0 to 12.
 
         perl bitiles2png.pl -i acbitiles -o austiles -0 -v
 
 
-7. Create PNG tiles for Sydney with light green dots, zooms 5 to 12.
+8. Create PNG tiles for Sydney with light green dots, zooms 5 to 12.
    Write empty tiles where there are no points (JOSM requires them).
 
         perl bitiles2png.pl -i acbitiles -o sydneytiles -b 150.8,-34.1,151.4,-33.6 -z 12 -u 5 -c 0,255,0 -e -v
