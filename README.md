@@ -11,8 +11,8 @@ consisting of point coordinates. [Get it here](http://planet.osm.org/gps/).
 
 * `filter-gpx.pl`
 
-        Make extracts for GPX planet dump. Accepts tar file on STDIN and
-        produces tar file and a metadata header for each filtering polygon.
+    Make extracts for GPX planet dump. Accepts tar file on STDIN and
+    produces tar file and a metadata header for each filtering polygon.
 
 * `gpx2bitiles.pl`
 
@@ -30,8 +30,8 @@ consisting of point coordinates. [Get it here](http://planet.osm.org/gps/).
 
 * `checkstatus.pl`
 
-        Draws an image of all existing tiles for a given zoom. Useful for checking
-        rendering progress of `gpx2bitiles.pl` -- but only for CSV input.
+    Draws an image of all existing tiles for a given zoom. Useful for checking
+    rendering progress of `gpx2bitiles.pl` -- but only for CSV input.
 
 You can create antialiased low zoom tiles using [this tool](https://github.com/AMDmi3/tiletool).
 
